@@ -10,6 +10,8 @@ from numpy import maximum
 import os
 import re
 import ast
+import math
+from scipy.stats import chi2_contingency
 
 def load_and_split(path, target_name, test_size=0.2, random_state=42):
     data = pd.read_csv(path)
@@ -89,14 +91,14 @@ def plots_iterations(rs, bs, model_name, dataset_name):
     bs_max_score = maximum.accumulate(bs["mean_test_score"])
 
     axes[0].plot(range(1, random_iter + 1), rs_best, label='RandomizedSearchCV', marker='o')    
-    axes[0].plot(range(1, random_iter + 1), rs_max_score, color="orange", linestyle="--", label="Running best")
+    axes[0].plot(range(1, random_iter + 1), rs_max_score, color="red", linestyle="--", label="Running best")
     axes[0].set_title('RandomizedSearchCV')
     axes[0].set_xlabel('Liczba iteracji')
     axes[0].legend()
     axes[0].grid()
     
     axes[1].plot(range(1, bayes_iter + 1), bs_best, label='BayesSearchCV', marker='x')
-    axes[1].plot(range(1, bayes_iter + 1), bs_max_score, color="orange", linestyle="--", label="Running best")
+    axes[1].plot(range(1, bayes_iter + 1), bs_max_score, color="red", linestyle="--", label="Running best")
     axes[1].set_title('BayesSearchCV')
     axes[1].set_xlabel('Liczba iteracji')
     axes[1].legend()
@@ -173,22 +175,6 @@ def get_best_result(mode, model_name, df_number):
 
     return model_name, best_params, best_score
 
-
-def evaluate_on_test(model, best_params, list_X_train, list_y_train, list_X_test, list_y_test):
-    classification_reports = {}
-    test_auc = {}
-    for i in range(len(best_params)):
-        best_model = model.__class__(**best_params[i], random_state=42)
-        best_model.fit(list_X_train[i], list_y_train[i])
-        y_pred = best_model.predict(list_X_test[i])
-        y_pred_proba = best_model.predict_proba(list_X_test[i])[:, 1]
-        test_auc[i] = roc_auc_score(list_y_test[i], y_pred_proba)
-        print(f'Dataset {i}: Test AUC: {test_auc[i]}')
-        classification_reports[i] = classification_report(list_y_test[i], y_pred)
-        print(classification_reports[i])
-    return test_auc, classification_reports
-
-
 def to_dict(params_list):
     params_dict = {}
 
@@ -210,32 +196,59 @@ def to_dict(params_list):
     return params_dict
 
 
-def analyze_tunability(model, list_X_train, list_y_train, list_best_params, default_params, scoring = 'roc_auc'):
-    default_scores = []
-    best_scores = []
-    diff_scores = []
+def test(model, list_X_train, list_y_train, list_X_test, list_y_test, best_params):
     
+    classification_reports = {}
+    test_auc = {}
     for i in range(len(list_X_train)):
         X_train = list_X_train[i]
         y_train = list_y_train[i]
-        print(type(default_params))
-        print(default_params)
-        print(type(list_best_params[i]))
-        print(list_best_params[i])
+        X_test = list_X_test[i]
+        y_test = list_y_test[i]
 
-        default = to_dict(default_params[type(model).__name__][0][1:-1].split(', '))
-        default_model = model.__class__(**default, random_state=42)
-        print(default_model)
-        default_score = cross_val_score(default_model, X_train, y_train, cv=3, scoring=scoring).mean()
-        default_scores.append(default_score)
-
-        best_par = to_dict(list_best_params[i][0][1:-1].split(', '))
-
-        best_model = model.__class__(**best_par, random_state=42)
-
-        best_score = cross_val_score(best_model, X_train, y_train, cv=3, scoring=scoring).mean()
-        best_scores.append(best_score)
+        model = model.__class__(**best_params, random_state=42)
+        print(model)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
         
-        diff_scores.append(best_score - default_score)
-    return np.array(default_scores), np.array(best_scores), np.array(diff_scores)
+        test_auc[i] = roc_auc_score(y_test, y_pred_proba)
+        print(f'Dataset {i}: Test AUC: {test_auc[i]}')
+        classification_reports[i] = classification_report(y_test, y_pred)
+        print(classification_reports[i])
+        
+    return test_auc, classification_reports
+
+
+def plot_target_distribution_by_groups(data, target_col):
+    group_cols = [col for col in data.columns if col != target_col and data[col].nunique() <= 10]
     
+    n_plots = len(group_cols)
+    n_cols = 3  
+    n_rows = math.ceil(n_plots / n_cols)
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, 5 * n_rows))
+    axes = axes.flatten()
+    
+    for i, group_col in enumerate(group_cols):
+        grouped = data.groupby(group_col)[target_col].value_counts(normalize=True).unstack()
+        print(f"\nRozkład klas w grupach '{group_col}':\n", grouped)
+        
+        grouped.plot(kind='bar', stacked=True, ax=axes[i])
+        axes[i].set_title(f'w grupie {group_col}')
+        axes[i].set_ylabel('Proporcja')
+        
+        contingency_table = pd.crosstab(data[group_col], data[target_col])
+        chi2, p, _, _ = chi2_contingency(contingency_table)
+        print(f"Chi2 dla '{group_col}': {chi2}, p-value: {p}")
+        if p < 0.05:
+            print(f"Istnieje statystycznie istotna różnica w rozkładzie klas między grupami w kolumnie '{group_col}' (może występować sampling bias).")
+        else:
+            print(f"Brak istotnych różnic w rozkładzie klas między grupami w kolumnie '{group_col}'.")
+    
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+        
+    plt.suptitle('Proporcje klas w różnych grupach', y=1.02)
+    plt.tight_layout()
+    plt.show()
