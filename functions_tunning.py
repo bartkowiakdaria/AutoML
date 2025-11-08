@@ -1,13 +1,11 @@
 import os
 import pandas as pd
 from sklearn.metrics import classification_report, roc_auc_score
-from sklearn.model_selection import cross_val_score, cross_val_score, train_test_split
-import numpy as np
+from sklearn.model_selection import train_test_split
 from sklearn.model_selection import RandomizedSearchCV
 from skopt import BayesSearchCV 
 import matplotlib.pyplot as plt
 from numpy import maximum
-import os
 import re
 import ast
 import math
@@ -207,11 +205,10 @@ def test(model, list_X_train, list_y_train, list_X_test, list_y_test, best_param
         y_test = list_y_test[i]
 
         model = model.__class__(**best_params, random_state=42)
-        print(model)
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
         y_pred_proba = model.predict_proba(X_test)[:, 1]
-        
+
         test_auc[i] = roc_auc_score(y_test, y_pred_proba)
         print(f'Dataset {i}: Test AUC: {test_auc[i]}')
         classification_reports[i] = classification_report(y_test, y_pred)
