@@ -8,4 +8,4 @@
 - Foldery z odpowiednimi nazwami ramek danych (depression, diabetes, loan, weather) zawierają orginalną ramkę danych plik, który został użyty do preprocessingu danych oraz wynikową ramkę danych używaną w dalszych etapach.
 - Głównym plikiem jest 'tunning_all_models.ipynb' zawierający wszystkie kroki podjęte do wyznaczenia hiperparametrów ich domyślnych wersji oraz dalszą analizę. Funckje wykorzystywane w tym pliku są umieszczone w 'functions_tunning.py'.
 - Folder results_tunning zawiera wyniki przeszukiwania siatek hiperparametrów dla każdego zbioru danych, modelu i rodzaju przeszukiwania (RandomSearch, BayesSearch). Zapis umożliwił pracę na danych bez konieczności wykonywania długiego przeszukiwania wielokrotnie.
-- Folder report zawiera końcowy raport oraz wykresy, do których odnosi się raport.
+- Folder raport zawiera końcowy raport oraz wykresy, do których odnosi się raport.
